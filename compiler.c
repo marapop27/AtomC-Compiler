@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <stdarg.h>
 
+#include <unistd.h>
+
 
 #define SAFEALLOC(var,Type) if((var=(Type*)malloc(sizeof(Type)))==NULL)err("not enough memory");
 
@@ -17,6 +19,14 @@ enum{ID, END, BREAK, CHAR, DOUBLE, ELSE, FOR, IF, INT,
     LACC, RACC, ADD, SUB, MUL, DIV, DOT, AND, OR, NOT, ASSIGN,
 //	 34		 35	   36	  37	  38		39
     EQUAL, NOTEQ, LESS, LESSEQ, GREATER, GREATEREQ}; // tokens codes
+
+char *codeNames[40] = {"ID", "END", "BREAK", "CHAR", "DOUBLE", "ELSE", "FOR", 
+	"IF", "INT", "RETURN", "STRUCT", "VOID", "WHILE", "CT_INT" , "CT_REAL",
+	"CT_CHAR", "CT_STRING", "COMMA", "SEMICOLON", "LPAR", "RPAR", "LBRACKET",
+	"RBRACKET", "LACC", "RACC", "ADD", "SUB", "MUL", "DIV", "DOT", "AND",
+	"OR", "NOT", "ASSIGN", "EQUAL", "NOTEQ", "LESS", "LESSEQ", "GREATER",
+	"GREATEREQ"};
+
 
 typedef struct _Token{
     int code; // code (name)
@@ -49,6 +59,7 @@ Token *addTk(int code)
     }
     
     lastToken=tk;
+	printf("%s ", codeNames[tk->code]);
     return tk;
 }
 
@@ -77,22 +88,56 @@ void tkerr(const Token *tk,const char *fmt,...)
     exit(-1);
 }
 
-char* createString(char* start, char* end) {
+char* createString(const char* start, const char* end) {
 	int length = end - start + 1;
 	char *myString=(char*)malloc(length * sizeof(char));
 	snprintf(myString, length, "%s", start);
 	return myString;
 }
 
+char escapeChar(char ch){
+	switch(ch){
+		case 'a':
+			return '\a';
+		case 'b':
+			return '\b';
+		case 'f':
+			return '\f';
+		case 'n':
+			return '\n';
+		case 'r':
+			return '\r';
+		case 't':
+			return '\t';
+		case 'v':
+			return '\v';
+		case '\"':
+			return '\"';
+		case '\'':
+			return '\'';
+		case '\\':
+			return '\\';
+		case '\?':
+			return '\?';
+		case '\0':
+			return '\0';
+	}
+}
+
 int getNextToken(char *file)
 {
+	printf("intra costel\n");
     int state=0, nCh;
-    char ch ;
+    char ch;
+	char* stringRepresentation;
     const char *pStartCh, *pCrtCh = file;
     Token *tk;
     
     while(1){ // infinite loop
         ch = *pCrtCh;
+		printf("ce sa mai zic       %c  state:%d\n", ch, state);
+		// if(state == 4)
+		// 	sleep(2);
 
         switch(state){
             case 0: // transitions test for state 0
@@ -108,10 +153,24 @@ int getNextToken(char *file)
                     line++;
                     pCrtCh++;
                 }
-				else if(isdigit(ch)){
+				else if(isdigit(ch) && ch != '0'){
 					pStartCh = pCrtCh;
 					state = 7;
 					pCrtCh++;
+				}
+				else if(isdigit(ch) && ch == '0'){
+					pStartCh = pCrtCh;
+					state = 16;
+					pCrtCh++;
+				}
+				else if(ch=='\'') {
+					pCrtCh++;
+					state = 21;
+				}
+				else if(ch=='\"') {
+					pStartCh = pCrtCh;
+					pCrtCh++;
+					state = 24;
 				}
                 else if(ch==','){
 					pCrtCh++;
@@ -197,10 +256,10 @@ int getNextToken(char *file)
 						addTk(NOT);                
 					}
 				}
-                else if(ch=='='){
+                else if(ch == '='){
 					pCrtCh++;
-					ch=*pCrtCh;
-					if(ch=='='){
+					ch = *pCrtCh;
+					if(ch == '='){
 						pCrtCh++;
 						addTk(EQUAL);
 					}
@@ -208,10 +267,10 @@ int getNextToken(char *file)
 						addTk(ASSIGN);              
 					}
 				}               
-                else if(ch=='<'){
+                else if(ch == '<'){
 					pCrtCh++;
-					ch=*pCrtCh;
-					if(ch=='='){
+					ch = *pCrtCh;
+					if(ch == '='){
 						pCrtCh++;
 						addTk(LESSEQ);
 					}
@@ -219,10 +278,10 @@ int getNextToken(char *file)
 						addTk(LESS);            
 					}
 				}
-				else if(ch=='>'){
+				else if(ch == '>'){
 					pCrtCh++;
 					ch=*pCrtCh;
-					if(ch=='='){
+					if(ch == '='){
 						pCrtCh++;
 						addTk(GREATEREQ);
 					}
@@ -230,7 +289,7 @@ int getNextToken(char *file)
 						addTk(GREATER);             
 					}
 				}
-                else if(ch==0){ // the end of the input string
+                else if(ch == 0){ // the end of the input string
                     addTk(END);
                     return END;
                 }
@@ -241,7 +300,7 @@ int getNextToken(char *file)
                 if(isalnum(ch) || ch=='_')
                     pCrtCh++;
                 else 
-                    state=2;
+                    state = 2;
                 break;
             case 2:
                 nCh=pCrtCh-pStartCh; // the id length
@@ -271,7 +330,7 @@ int getNextToken(char *file)
                 // … all keywords …
                 else{ // if no keyword, then it is an ID
                     tk = addTk(ID);
-                    tk->text=createString(pStartCh,pCrtCh);
+                    tk->text = createString(pStartCh,pCrtCh);
                 }
 				state = 0;
 				break;
@@ -311,7 +370,7 @@ int getNextToken(char *file)
 				}
 				else if (ch !='*' && ch !='/'){
 					pCrtCh++;
-					state=4;
+					state= 4;
 				}
 				break;
             case 6:
@@ -321,13 +380,13 @@ int getNextToken(char *file)
 				}
 				else if(ch=='\n') {
 					pCrtCh++;
-					state=0;
+					state = 0;
 					line++;
 				}
 				else
 				{
 					pCrtCh++;
-					state=0;
+					state = 0;
 				} 
 				break;
 			case 7:
@@ -349,7 +408,7 @@ int getNextToken(char *file)
 			case 8:
 				if(isdigit(ch)){
 					pCrtCh++;
-					state=11;
+					state = 11;
 				}
 				else 
 					tkerr(tk, "Float number format expected");
@@ -357,21 +416,21 @@ int getNextToken(char *file)
 			case 9:
 				if(ch=='+' || ch=='-'){
 					pCrtCh++;
-					state=14;
+					state = 14;
 				}
 				else if(isdigit(ch)){
 					pCrtCh++;
-					state=15;
+					state = 15;
 				}
 				else {
 					pCrtCh++;
-					state=14;
+					state = 14;
 				}
 				break;
 			case 10:
 				tk = addTk(CT_INT);
-				char* integer = createString(pStartCh, pCrtCh);
-				tk->i = atoi(integer);
+				stringRepresentation = createString(pStartCh, pCrtCh);
+				tk->i = atoi(stringRepresentation);
 				state = 0;
 				break;
 			case 11:
@@ -381,19 +440,11 @@ int getNextToken(char *file)
 				}
 				else if(ch=='e' || ch=='E'){
 					pCrtCh++;
-					state=9;
+					state = 9;
 				}
 				else
 					state = 12;
 				break;
-			// case 13:
-			// 	if(ch=='e' || ch=='E'){
-			// 		pCrtCh++;
-			// 		state=9;
-			// 	}
-			// 	else 
-			// 		state = 13;
-			// 	break;
 			case 12:
 				tk = addTk(CT_REAL);
 				tk->r = strtod(pStartCh, NULL);
@@ -415,12 +466,121 @@ int getNextToken(char *file)
 				else 
 					state = 12;
 				break;
-
+			case 16:
+				if(ch >= '0' && ch <= '7'){
+					pCrtCh++;
+					state = 17;
+				}
+				else if(ch=='x' || ch=='X'){
+					pCrtCh++;
+					state = 18;
+				}
+				else if(ch=='.'){
+					pCrtCh++;
+					state = 8;
+				}
+				else if(ch=='e' || ch=='E'){
+					pCrtCh++;
+					state = 9;
+				}
+				else{
+					state = 10;
+				}
+				break;
+			case 17:
+				if(ch>='0' && ch <= '7') {
+					state = 17;
+					pCrtCh++;
+				}
+				else
+					state = 20;
+				break;
+			case 18:
+				if((isdigit(ch)) || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')){
+					pCrtCh++;
+					state = 18;
+				}
+				else
+					state = 19;
+				break;
+			case 19:
+				tk = addTk(CT_INT);
+				stringRepresentation = createString(pStartCh, pCrtCh);
+				tk->i = strtol(stringRepresentation, NULL, 16);
+				state = 0;
+				break;
+			case 20:
+				tk = addTk(CT_INT);
+				stringRepresentation = createString(pStartCh, pCrtCh);
+				tk->i = strtol(stringRepresentation, NULL, 8);
+				state = 0;
+				break;
+			case 21:
+				if(ch=='\\'){
+					pCrtCh++;
+					state=22;
+				}
+				else{
+					pCrtCh++;
+					state=23;
+				}
+				break;
+			case 22:
+				if(strchr("abfnrtv\'?\"\\0", ch)){
+					pCrtCh++;
+					state=23;
+				}
+				else{
+					tkerr(tk,"Invalid character\n");
+				}
+				break;
+			case 23:
+				if(ch=='\''){
+					tk = addTk(CT_CHAR);
+					if(*(pCrtCh -2) == '\\'){
+						tk->i = escapeChar(*(pCrtCh -1));
+					}
+					else
+						tk->i = *(pCrtCh -1);
+					pCrtCh++;
+					state = 0;
+				}
+				else
+					tkerr(tk, "Character expected");
+				break;
+			case 24:
+				if(ch == '\\'){
+					pCrtCh++;
+					state = 25;
+				}
+				else{
+					state = 26;
+				}
+				break;
+			case 25:
+				if(strchr("abfnrtv'?\"\\0", ch)){
+					pCrtCh++;
+					state = 26;
+				}
+				else 
+					tkerr(tk, "Invalid escape character\n");
+				break;
+			case 26:
+				if(ch == '\"') {
+					tk = addTk(CT_STRING);
+					tk->text = createString(pStartCh + 1, pCrtCh);
+					pCrtCh++;
+					state = 0;
+				}else {
+					state = 24;
+					pCrtCh++;
+				}
+				break;
         }
     }
 }
 
-char *putFileContentToString(char *filename ){
+char *putFileContentToString(char *filename){
 	char *buffer;
 	long int length = 0;
 
@@ -443,16 +603,30 @@ char *putFileContentToString(char *filename ){
 	return buffer;
 }
 
+int getFileLength(char *filename) {
+	FILE * fp = fopen (filename, "rb");
+
+	if (!fp) 
+		err("Error opening file (%s)", filename);
+	
+	fseek (fp, 0, SEEK_END);
+	int length = ftell (fp);
+	fclose (fp);
+	return length;
+}
+
 void printTokens(Token * printer) {
 	while(printer!=NULL){
-		if(printer->code == ID)
-			printf("%d:%s ", printer->code, printer->text);
+		if(printer->code == ID || printer->code == CT_STRING)
+			printf("%s:%s ", codeNames[printer->code], printer->text);
 		else if(printer->code == CT_INT)
-			printf("%d:%d ", printer->code, printer->i);
+			printf("%s:%ld ", codeNames[printer->code], printer->i);
 		else if(printer->code == CT_REAL)
-			printf("%d:%f ", printer->code, printer->r);
+			printf("%s:%f ", codeNames[printer->code], printer->r);
+		else if(printer->code == CT_CHAR)
+			printf("%s:%c ", codeNames[printer->code], printer->i);
 		else
-			printf("Code:%d ", printer->code);
+			printf("%s ", codeNames[printer->code]);
 		printf("\n");
 		printer=printer->next;
 	}
@@ -465,29 +639,16 @@ int main(int argc, char **argv){
 		printf("Second argument must be a C file\n");
 		exit(1);
 	}
-	char *buffer = putFileContentToString(argv[1]);
+	char *buffer = (char*)malloc(getFileLength(argv[1]) * sizeof(char));
+	buffer = putFileContentToString(argv[1]);
 	printf("nevasta\n\n");
+
 	printf("%s\n", buffer);
 
 	getNextToken(buffer);
 
 	Token *printer = tokens;
 	printTokens(printer);
-	
-
-	// FILE *fp;
-
-	// fp = fopen(argv[1], "r");
-
-	// if (!fp) 
-	// 	err("Error opening file (%s)", argv[1]);
-
-
-	// fclose(fp);
 
     return 0;
 }
-
-
-
-
