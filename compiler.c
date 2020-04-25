@@ -126,7 +126,6 @@ char escapeChar(char ch){
 
 int getNextToken(char *file)
 {
-	printf("intra costel\n");
     int state=0, nCh;
     char ch;
 	char* stringRepresentation;
@@ -136,8 +135,6 @@ int getNextToken(char *file)
     while(1){ // infinite loop
         ch = *pCrtCh;
 		printf("ce sa mai zic       %c  state:%d\n", ch, state);
-		// if(state == 4)
-		// 	sleep(2);
 
         switch(state){
             case 0: // transitions test for state 0
@@ -531,7 +528,7 @@ int getNextToken(char *file)
 					state=23;
 				}
 				else{
-					tkerr(tk,"Invalid character\n");
+					tkerr(tk, "Invalid character\n");
 				}
 				break;
 			case 23:
@@ -578,6 +575,635 @@ int getNextToken(char *file)
 				break;
         }
     }
+}
+
+
+
+Token *crtTk = NULL;
+Token *consumedTk = NULL;
+
+int consume(int code){
+	if(crtTk->code == code){
+		consumedTk = crtTk;
+		crtTk = crtTk->next;
+		return 1;
+	}
+	return 0;
+	}
+
+int unit(){
+	while (1) {
+		if (declStruct()) {}
+		else if (declFunc()) {}
+		else if (declVar()) {}
+		else break;
+	}
+	if (!consume(END)) tkerr(crtTk, "Missing END token");
+	return 1;
+}
+
+int declStruct(){
+	Token *startTk = crtTk;
+
+	if (!consume(STRUCT)) return 0;
+	if (!consume(ID)) tkerr(crtTk, "Expected ID after struct declaration.");
+	if (!consume(LACC)) {
+		crtTk = startTk;
+		return 0;
+	}
+	while (1) {
+		if (declVar()) {}
+		else break;
+	}
+	if (!consume(RACC)) tkerr(crtTk, "Expected '}' after struct declaration.");
+	if (!consume(SEMICOLON)) tkerr(crtTk, "Expected ';' after struct declaration.");
+	return 1;
+}
+
+int declVar(){
+	Token *startTk = crtTk;
+
+	if (typeBase()) {
+		if (consume(ID)) {
+			arrayDecl();
+			while (1) {
+				if (consume(COMMA)) {
+					if (consume(ID)) {
+						arrayDecl();
+					}
+					else tkerr(crtTk, "Expected ID after ',' in variable declaration.");
+				}
+				else break;
+			}
+			if (consume(SEMICOLON)) return 1;
+			else tkerr(crtTk, "Expected ';' after variable declaration.");
+		}
+		else crtTk = startTk;
+	}
+	else crtTk = startTk;
+
+	return 0;
+}
+int typeBase(){
+	Token *startTk = crtTk;
+
+	if (consume(INT)) return 1;
+	if (consume(DOUBLE)) return 1;
+	if (consume(CHAR)) return 1;
+	if (consume(STRUCT)) {
+		if (consume(ID)) {
+			return 1;
+		}
+		else tkerr(crtTk, "Expected ID after struct declaration.");
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int arrayDecl(){
+	Token *startTk = crtTk;
+
+	if (consume(LBRACKET)) {
+		expr();
+		if (consume(RBRACKET)) {
+			return 1;
+		}
+		else tkerr(crtTk, "Expected ']' after array declaration.");
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int typeName(){
+	Token *startTk = crtTk;
+	if (typeBase()) {
+		arrayDecl();
+		return 1;
+	}
+	crtTk = startTk;
+	return 0;
+}
+
+int declFuncRepeatingCode() {
+	Token *startTk = crtTk;
+
+	if (consume(ID)) {
+		if (consume(LPAR)) {
+			if (funcArg()) {
+				while (1) {
+					if (consume(COMMA)) {
+						if (funcArg()) {
+							continue;
+						}
+						else tkerr(crtTk, "There are no argument in function declaration");
+					}
+					else break;
+				}
+			}
+			if (consume(RPAR)) {
+				if (stmCompound()) {
+					return 1;
+				}
+				else tkerr(crtTk, "Expected compund statement for function declaration.");
+			}
+			else tkerr(crtTk, "Expected ')' for function declaration.");
+		}
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int declFunc(){
+	Token *startTk = crtTk;
+
+	if (typeBase()) {
+		if(consume(MUL);
+		if (declFuncRepeatingCode()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Expected ID after function type declaration");
+	}
+	if (consume(VOID)) {
+		if (!declFuncRepeatingCode())
+			tkerr(crtTk, "Expected ID after void");
+		return 1;
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int funcArg(){
+	Token *startTk = crtTk;
+
+	if (typeBase()) {
+		if (consume(ID)) {
+			arrayDecl();
+			return 1;
+		}
+		else tkerr(crtTk, "Expected ID for function argument.");
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int stm(){
+	Token *startTk = crtTk;
+
+	if (stmCompound()) return 1;
+
+	if (consume(IF)) {
+		if (consume(LPAR)) {
+			if (expr()) {
+				if (consume(RPAR)) {
+					if (stm()) {
+						if (consume(ELSE)) {
+							if (stm()) return 1;
+							else tkerr(crtTk, "Statement expected after else declaration");
+						}
+						return 1;
+					}
+					else tkerr(crtTk, "Statement expected");
+				}
+				else tkerr(crtTk, "Expected ')' ");
+			}
+			else tkerr(crtTk, "Expected expresion inside if condition");
+		}
+		else tkerr(crtTk, "Expected '(' ");
+	}
+	crtTk = startTk;
+
+	if (consume(WHILE)) {
+		if (consume(LPAR)) {
+			if (expr()) {
+				if (consume(RPAR)) {
+					if (stm()) {
+						return 1;
+					}
+					else tkerr(crtTk, "Expected statement inside while body");
+				}
+				else tkerr(crtTk, "Expected ')' ");
+			}
+			else tkerr(crtTk, "Expected expresion inside while declaration");
+		}
+		else tkerr(crtTk, "Expected '(' ");
+	}
+	crtTk = startTk;
+
+	if (consume(FOR)) {
+		if (consume(LPAR)) {
+			expr();
+			if (consume(SEMICOLON)) {
+				expr();
+				if (consume(SEMICOLON)) {
+					expr();
+					if (consume(RPAR)) {
+						if (stm()) {
+							return 1;
+						}
+						else tkerr(crtTk, "Expected statement inside for body");
+					}
+				 	else tkerr(crtTk, "Expected ')' ");
+				}
+				else tkerr(crtTk, "Expected ';' inside for 1");
+			}
+			else tkerr(crtTk, "Expected ';' inside for 2");
+		}
+		else tkerr(crtTk, "Expected '(' ");
+	}
+	crtTk = startTk;
+
+	if (consume(BREAK)) {
+		if (consume(SEMICOLON))
+			return 1;
+		else tkerr(crtTk, "Expected ';' after break statement");
+	}
+	crtTk = startTk;
+
+	if (consume(RETURN)) {
+		expr();
+		if (consume(SEMICOLON)) {
+			return 1;
+		}
+		else tkerr(crtTk, "Expected ';' after return statement");
+	}
+	crtTk = startTk;
+
+	if (consume(SEMICOLON)) {
+		return 1;
+	}
+	else { 
+		if (expr()) {
+			if (!consume(SEMICOLON)) tkerr(crtTk, "Expected ';' after expression");
+			return 1;
+		}
+	}
+	crtTk = startTk;
+	return 0;
+}
+
+int stmCompound(){
+	Token *startTk = crtTk;
+
+	if (consume(LACC)) {
+		while (1) {
+			if (declVar())
+				continue;
+			else if (stm())
+			    continue;
+			else break;
+		}
+		if (consume(RACC))
+			return 1;
+		else tkerr(crtTk, "Expected '}' ");
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int expr(){
+	Token *startTk = crtTk;
+
+	if (exprAssign())
+		return 1;	
+	crtTk = startTk;
+
+	return 0;
+}
+
+int exprAssign(){
+	Token *startTk = crtTk;
+
+	if (exprUnary()) {
+		if (consume(ASSIGN)) {
+			if (exprAssign()){
+				return 1;
+			}
+			else tkerr(crtTk, "Error at expression assign");
+		}
+	}
+	crtTk = startTk;
+
+	if (exprOr()) return 1;
+	crtTk = startTk;
+
+	return 0;
+}
+
+int exprOrLite() {
+	Token *startTk = crtTk;
+
+	if (consume(OR)) {
+		if (exprAnd()) {
+			if (exprOrLite()) {
+				return 1;
+			}
+			else tkerr(crtTk, "Error at OR expression");
+		}
+		else tkerr(crtTk, "Error at OR expression");
+	}
+
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprOr(){
+	Token *startTk = crtTk;
+
+	if (exprAnd()) {
+		if (exprOrLite()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Error at OR expression");
+	}
+
+	return 0;
+}
+
+int exprAndLite() {
+	Token *startTk = crtTk;
+
+	if (consume(AND)) {
+		if (exprEq()) {
+			if (exprAndLite()) {
+				return 1;
+			}
+			else tkerr(crtTk, "Error at AND expression");
+		}
+		else tkerr(crtTk, "Error at AND expression");
+	}
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprAnd(){
+	Token *startTk = crtTk;
+
+	if (exprEq()) {
+		if (exprAndLite()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Error at AND expression");
+	}
+
+	return 0;
+}
+
+int exprEqLite() {
+	Token *startTk = crtTk;
+
+	if (consume(EQUAL) || consume(NOTEQ)) {
+		if (exprRel()) {
+			if (exprEqLite()) 
+				return 1;
+			else tkerr(crtTk, "Error at equality expression");
+		}
+		else tkerr(crtTk, "Error at equality expression");
+	}
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprEq(){
+	Token *startTk = crtTk;
+
+	if (exprRel()) {
+		if (exprEqLite()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Error at equality expression");
+	}
+
+	return 0;
+}
+
+int exprRelLite() {
+	Token *startTk = crtTk;
+
+	if (consume(LESS) || consume(LESSEQ) || consume(GREATER) || consume(GREATEREQ)) {
+		if (exprAdd()) {
+			if (exprRelLite()) {
+				return 1;
+			}
+			else tkerr(crtTk, "Error at rel expression");
+		}
+		else tkerr(crtTk, "Error at rel expression");
+	}
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprRel(){
+	Token *startTk = crtTk;
+
+	if (exprAdd()) {
+		if (exprRelLite()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Error at rel expression");
+	} 
+
+	return 0;
+}
+
+int exprAddLite() {
+	Token *startTk = crtTk;
+
+	if (consume(ADD) || consume(SUB)) {
+		if (exprMul()) {
+			if (exprAddLite()) {
+				return 1;
+			}
+			else tkerr(crtTk, "Error at add expression");
+		}
+		else tkerr(crtTk, "Error at add expression");
+	}
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprAdd(){
+	Token *startTk = crtTk;
+
+	if (exprMul()) {
+		if (exprAddLite())
+			return 1;
+		else tkerr(crtTk, "Error at add expression");
+	}
+
+	return 0;
+}
+
+int exprMulLite() {
+	Token *startTk = crtTk;
+
+	if (consume(MUL) || consume(DIV)) {
+		if (exprCast()) {
+			if (exprMulLite()) {
+				return 1;
+			}
+			else tkerr(crtTk, "Error at multiply expression");
+		}
+		else tkerr(crtTk, "Error at multiply expression");
+	}
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprMul(){
+	Token *startTk = crtTk;
+
+	if (exprCast()) {
+		if (exprMulLite()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Error at multiply expression");
+	}
+
+	return 0;
+}
+
+int exprCast(){
+	Token *startTk = crtTk;
+
+	if (consume(LPAR)) {
+		if (typeName()) {
+			if (consume(RPAR)) {
+				if (exprCast()) {
+					return 1;
+				}
+				else tkerr(crtTk, "Error at cast");
+			}
+			else tkerr(crtTk, "Expected ')' ");
+		}
+		else tkerr(crtTk, "Expected cast type name");
+	}
+	if (exprUnary()) {
+		return 1;
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int exprUnary(){
+	Token *startTk = crtTk;
+
+	if (consume(SUB) || consume(NOT)) {
+		if (exprUnary())
+			return 1;
+		else tkerr(crtTk, "Expected unary expression");
+	}
+	crtTk = startTk;
+
+	if (exprPostfix()) {
+		return 1;
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int exprPostfixLite() {
+	Token *startTk = crtTk;
+
+	if (consume(LBRACKET)) {
+		if (expr()) {
+			if (consume(RBRACKET)) {
+				if (exprPostfixLite()) {
+					return 1;
+				}
+				else tkerr(crtTk, "Error at postfix declaration");
+			}
+			else tkerr(crtTk, "Expected ']' ");
+		}
+		else tkerr(crtTk, "Expected expression after '[' in postfix expression");
+	}
+	if (consume(DOT)) {
+		if (consume(ID)) {
+			if (exprPostfixLite()) {
+				return 1;
+			}
+			else tkerr(crtTk, "Error at postfix declaration");
+		}
+		else tkerr(crtTk, "ID expected in postfix expression");
+	}
+	crtTk = startTk;
+
+	return 1;
+}
+
+int exprPostfix(){
+	Token *startTk = crtTk;
+
+	if (exprPrimary()) {
+		if (exprPostfixLite()) {
+			return 1;
+		}
+		else tkerr(crtTk, "Error at postfix declaration");
+	}
+	crtTk = startTk;
+
+	return 0;
+}
+
+int exprPrimary(){
+	Token *startTk = crtTk;
+
+	if (consume(ID)) {
+		if (consume(LPAR)) {
+			if (expr()) {
+				while (1) {
+					if (consume(COMMA)) {
+						if (expr())
+							continue;
+						else tkerr(crtTk, "Expected expression after ','");
+					}
+					else break;
+				}
+			}
+			if (consume(RPAR)) {
+				return 1;
+			}
+			else tkerr(crtTk, "Missing RPAR in primary EXPR after ID.");
+		}
+		return 1;
+	}
+	if (consume(CT_INT)) 
+		return 1;
+
+	if (consume(CT_REAL)) 
+		return 1;
+
+	if (consume(CT_CHAR)) 
+		return 1;
+
+	if (consume(CT_STRING)) 
+		return 1;
+
+	if (consume(LPAR)) {
+		if (expr()) {
+			if (consume(RPAR)) {
+				return 1;
+			}
+			else tkerr(crtTk, "Expected ')' in primary expression");
+		}
+		else tkerr(crtTk, "Expected expression after '(' ");
+	}
+	crtTk = startTk;
+
+	return 0;
 }
 
 char *putFileContentToString(char *filename){
@@ -632,16 +1258,9 @@ void printTokens(Token * printer) {
 	}
 }
 
-
-int main(int argc, char **argv){
-
-	if (argc < 2) {
-		printf("Second argument must be a C file\n");
-		exit(1);
-	}
-	char *buffer = (char*)malloc(getFileLength(argv[1]) * sizeof(char));
-	buffer = putFileContentToString(argv[1]);
-	printf("nevasta\n\n");
+void lexicalAnalysis(FILE *fp) {
+	char *buffer = (char*)malloc(getFileLength(fp) * sizeof(char));
+	buffer = putFileContentToString(fp);
 
 	printf("%s\n", buffer);
 
@@ -649,6 +1268,28 @@ int main(int argc, char **argv){
 
 	Token *printer = tokens;
 	printTokens(printer);
+}
+
+void syntacticAnalysis() {
+	Token *syn = tokens;
+	crtTk = syn;
+
+	if (unit())
+		printf("Syntactical Analysis stage DONE\n");
+	else tkerr(crtTk, "Error at Syntactical Analysis");
+}
+
+
+int main(int argc, char **argv){
+
+	if (argc < 2) {
+		printf("Second argument must be a C file\n");
+		exit(1);
+	}
+
+	lexicalAnalysis(argv[1]);	//Lexical Analyzer
+
+	syntacticAnalysis();		//Syntactic Analyzer
 
     return 0;
 }
